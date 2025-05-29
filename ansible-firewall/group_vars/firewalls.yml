@@ -119,15 +119,17 @@ firewall_cfg:
       overhead: 44
       mpu: 96
       diffserv: diffserv8
-      extra_opts: >
-        nowash triple-isolate nat ack-filter-aggressive split-gso
+      extra_opts: " nowash triple-isolate nat ack-filter-aggressive split-gso "
 
     lan:
+      rtt: 5ms
+      overhead: 44
+      mpu: 96    
       nic: *lan_if
       download: 1gbit
       upload:   1gbit
-      diffserv: besteffort
-      extra_opts: "split-gso"
+      diffserv: diffserv8
+      extra_opts: " split-gso "
 
   ##########################################################################
   # 7 ▸ NETIFY FLOW-ACTIONS  (builds the @"netify:*" ipsets)

@@ -27,3 +27,4 @@
 
 # 4 ▸ Optional QoS
 - import_tasks: cake.yml
+- import_tasks: qos_persist.yml  # Add this line

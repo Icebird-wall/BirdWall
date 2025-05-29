@@ -1,2 +1,2 @@
 [firewalls]
-ubuntu-vm ansible_host=YOUR_UBUNTU_VM_LAN_IP_ADDRESS ansible_user=YOUR_SUDO_USERNAME ansible_ssh_pass=YOUR_USER_PASSWORD ansible_become_pass=YOUR_SUDO_PASSWORD
+ubuntu-vm ansible_host=172.16.0.1 ansible_user=anivia ansible_ssh_pass=train ansible_become_pass=train

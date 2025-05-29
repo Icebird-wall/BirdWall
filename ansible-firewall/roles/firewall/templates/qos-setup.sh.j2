@@ -1,0 +1,40 @@
+#!/bin/bash
+set -e
+
+{% set wan = firewall_cfg.cake.wan %}
+{% set lan = firewall_cfg.cake.lan %}
+
+# Generate IFB names (4 chars "ifb_" + 11 chars of nic = 15 total)
+IFB_WAN="ifb_{{ wan.nic[:11] }}"
+IFB_LAN="ifb_{{ lan.nic[:11] }}"
+
+# Bring up IFBs
+ip link add ${IFB_WAN} type ifb 2>/dev/null || true
+ip link set dev ${IFB_WAN} up
+
+ip link add ${IFB_LAN} type ifb 2>/dev/null || true
+ip link set dev ${IFB_LAN} up
+
+# WAN upload (egress) on the real interface
+tc qdisc del dev {{ wan.nic }} root 2>/dev/null || true
+tc qdisc add dev {{ wan.nic }} root cake bandwidth {{ wan.upload }} {{ wan.diffserv }} {{ wan.extra_opts }}  rtt {{ wan.rtt }} overhead {{ wan.overhead }} mpu {{ wan.mpu }}
+
+# WAN download (ingress → IFB)
+tc qdisc del dev {{ wan.nic }} ingress 2>/dev/null || true
+tc qdisc add dev {{ wan.nic }} ingress
+tc filter add dev {{ wan.nic }} ingress matchall action mirred egress redirect dev ${IFB_WAN}
+
+tc qdisc del dev ${IFB_WAN} root 2>/dev/null || true
+tc qdisc add dev ${IFB_WAN} root cake  bandwidth {{ wan.download }} {{ wan.diffserv }} {{ wan.extra_opts }}  rtt {{ wan.rtt }} overhead {{ wan.overhead }} mpu {{ wan.mpu }}
+
+# LAN upload on real interface
+tc qdisc del dev {{ lan.nic }} root 2>/dev/null || true
+tc qdisc add dev {{ lan.nic }} root cake bandwidth {{ lan.upload }} {{ lan.diffserv }} {{ lan.extra_opts }}
+
+# LAN download (ingress → IFB)
+tc qdisc del dev {{ lan.nic }} ingress 2>/dev/null || true
+tc qdisc add dev {{ lan.nic }} ingress
+tc filter add dev {{ lan.nic }} ingress matchall action mirred egress redirect dev ${IFB_LAN}
+
+tc qdisc del dev ${IFB_LAN} root 2>/dev/null || true
+tc qdisc add dev ${IFB_LAN} root cake bandwidth {{ lan.download }} {{ lan.diffserv }} {{ lan.extra_opts }}
