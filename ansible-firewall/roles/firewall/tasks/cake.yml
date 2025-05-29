@@ -1,0 +1,143 @@
+---
+###############################################################################
+#  Traffic-shaping with CAKE (+ IFB for download shaping)
+###############################################################################
+#  Variables expected under firewall_cfg.cake:
+#    <name>.nic  (string)       – physical device
+#    <name>.upload / download   – rates
+#    rtt / overhead / mpu / diffserv / extra_opts  (optional)
+#    if firewall_cfg.nat is true ⇒ add the "nat" keyword
+###############################################################################
+
+###############################################################################
+# 0. Collect CAKE-enabled interfaces (skip the “enabled” flag itself)
+###############################################################################
+- name: Build list of CAKE interfaces
+  ansible.builtin.set_fact:
+    _cake_interfaces: >-
+      {{
+        (firewall_cfg.cake | default({}))
+          | dict2items
+          | rejectattr('key', 'equalto', 'enabled')
+          | list
+      }}
+
+###############################################################################
+# 1. Bail out early if the feature is disabled
+###############################################################################
+- name: Skip CAKE tasks when disabled
+  ansible.builtin.meta: end_play
+  when: not (firewall_cfg.cake.enabled | default(true))
+
+###############################################################################
+# 2. Load IFB kernel module if **any** download shaping is requested
+###############################################################################
+- name: Ensure IFB module is loaded
+  ansible.builtin.modprobe:
+    name: ifb
+    state: present
+  when: _cake_interfaces | selectattr('value.download', 'defined') | list | length > 0
+  notify: Apply netplan   # or whatever handler restarts networking
+
+###############################################################################
+# 3. Create / up IFB devices (download side)
+###############################################################################
+- name: Create IFB device
+  vars:
+    _ifb: "{{ (item.value.ifb | default('ifb_' ~ item.value.nic))[:15] }}"
+  ansible.builtin.command: ip link add {{ _ifb }} type ifb
+  args:
+    creates: /sys/class/net/{{ _ifb }}
+  when: item.value.download is defined
+  loop: "{{ _cake_interfaces }}"
+
+- name: Bring IFB up
+  vars:
+    _ifb: "{{ (item.value.ifb | default('ifb_' ~ item.value.nic))[:15] }}"
+  ansible.builtin.command: ip link set dev {{ _ifb }} up
+  when: item.value.download is defined
+  loop: "{{ _cake_interfaces }}"
+
+###############################################################################
+# 4. **Flush everything** so we start clean
+###############################################################################
+- name: Delete existing root qdisc on NIC
+  ansible.builtin.command: tc qdisc del dev {{ item.value.nic }} root
+  loop: "{{ _cake_interfaces }}"
+  ignore_errors: true
+
+- name: Delete existing ingress qdisc on NIC
+  ansible.builtin.command:
+    argv: [ tc, qdisc, del, dev, "{{ item.value.nic }}", ingress ]
+  loop: "{{ _cake_interfaces }}"
+  ignore_errors: true
+
+- name: Delete old ingress filter on NIC → IFB
+  vars:
+    _ifb: "{{ (item.value.ifb | default('ifb_' ~ item.value.nic))[:15] }}"
+  ansible.builtin.command:
+    argv: [ tc, filter, del, dev, "{{ item.value.nic }}",
+            parent, "ffff:", protocol, all ]
+  when: item.value.download is defined
+  loop: "{{ _cake_interfaces }}"
+  ignore_errors: true
+
+- name: Delete existing root qdisc on IFB
+  vars:
+    _ifb: "{{ (item.value.ifb | default('ifb_' ~ item.value.nic))[:15] }}"
+  ansible.builtin.command: tc qdisc del dev {{ _ifb }} root
+  when: item.value.download is defined
+  loop: "{{ _cake_interfaces }}"
+  ignore_errors: true
+
+###############################################################################
+# 5. Attach CAKE to **upload** side
+###############################################################################
+- name: Add CAKE qdisc (upload)
+  ansible.builtin.command: >
+    tc qdisc add dev {{ item.value.nic }} root cake
+      bandwidth {{ item.value.upload }}
+      {%- if item.value.rtt is defined %} rtt {{ item.value.rtt }}{% endif %}
+      {{ item.value.diffserv | default('diffserv4') }}
+      {%- if item.value.overhead is defined %} overhead {{ item.value.overhead }}{% endif %}
+      {%- if item.value.mpu is defined %} mpu {{ item.value.mpu }}{% endif %}
+      {%- if firewall_cfg.nat | default(false) %} nat{% endif %}
+      {{ item.value.extra_opts | default('') | trim }}
+  when: item.value.upload is defined
+  loop: "{{ _cake_interfaces }}"
+
+###############################################################################
+# 6. Ingress path  (mirror → IFB → CAKE)
+###############################################################################
+- name: Add ingress qdisc
+  ansible.builtin.command:
+    argv: [ tc, qdisc, add, dev, "{{ item.value.nic }}",
+            handle, "ffff:", ingress ]
+  when: item.value.download is defined
+  loop: "{{ _cake_interfaces }}"
+
+- name: Mirror ingress traffic to IFB
+  vars:
+    _ifb: "{{ (item.value.ifb | default('ifb_' ~ item.value.nic))[:15] }}"
+  ansible.builtin.command:
+    argv: [ tc, filter, add, dev, "{{ item.value.nic }}",
+            parent, "ffff:", protocol, all,
+            u32, match, u32, 0, 0,
+            action, mirred, egress, redirect, dev, "{{ _ifb }}" ]
+  when: item.value.download is defined
+  loop: "{{ _cake_interfaces }}"
+
+- name: Add CAKE qdisc to IFB (download)
+  vars:
+    _ifb: "{{ (item.value.ifb | default('ifb_' ~ item.value.nic))[:15] }}"
+  ansible.builtin.command: >
+    tc qdisc add dev {{ _ifb }} root cake
+      bandwidth {{ item.value.download }}
+      {%- if item.value.rtt is defined %} rtt {{ item.value.rtt }}{% endif %}
+      {{ item.value.diffserv | default('diffserv4') }}
+      {%- if item.value.overhead is defined %} overhead {{ item.value.overhead }}{% endif %}
+      {%- if item.value.mpu is defined %} mpu {{ item.value.mpu }}{% endif %}
+      {%- if firewall_cfg.nat | default(false) %} nat{% endif %}
+      {{ item.value.extra_opts | default('') | trim }}
+  when: item.value.download is defined
+  loop: "{{ _cake_interfaces }}"

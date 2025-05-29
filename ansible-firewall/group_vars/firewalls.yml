@@ -1,0 +1,181 @@
+# ─────────────────────────────────────────────────────────────────────────────
+#  group_vars/firewall.yml           ← single source of truth
+# ─────────────────────────────────────────────────────────────────────────────
+
+firewall_cfg:
+
+  ##########################################################################
+  # 1 ▸ INTERFACES & ADDRESSING
+  ##########################################################################
+  interfaces:
+    lan:
+      nic: &lan_if "enp6s19" #EXAMPLE- USE YOUR NIC NAME FROM UBUNTU INSTALLATION
+      cidr: "172.16.0.1/24" #EXAMPLE- USE THE IP/SUBNET COMBO YOU WANT FOR YOUR LAN
+
+    wan:
+      nic: &wan_if "enx020632376766"
+      method: "dhcp" # DHCP IS USED HERE CAUSE I'M DOING TETHERING/GETTING INTERNET FROM ANOTHER SOURCE/CABLE. EDIT AS NEEDED
+
+  ##########################################################################
+  # 2 ▸ NETWORK ADDRESS TRANSLATION
+  ##########################################################################
+  nat: true                                   # masquerade LAN → WAN
+
+  ##########################################################################
+  # 3 ▸ DEFAULT POLICY (per nftables base chains)
+  ##########################################################################
+  policy:
+    input:   drop
+    forward: drop
+    output:  accept
+
+  ##########################################################################
+  # 4 ▸ SIMPLE ALLOW/DENY RULES  (ordered; most specific first)
+  ##########################################################################
+  rules:
+    - chain: input
+      from:  lan
+      action: accept
+      comment: "Allow LAN traffic to reach the firewall"
+
+    - chain: input
+      proto: icmp
+      action: accept
+      comment: "Allow ping"
+
+    - chain: forward
+      from: lan
+      to:   wan
+      action: accept
+      comment: "Permit LAN → WAN forwarding"
+
+  ##########################################################################
+  # 5 ▸ DSCP CLASSES   (high-level notation → nft mangle rules)
+  ##########################################################################
+  dscp_classes:
+
+    voice:
+      mark: cs6
+      match:
+        netify_sets:
+          - netify:app:zoom
+          - netify:app:microsoft-teams
+          - netify:category:voip
+          - netify:category:vpn
+        udp_ports: [53, 5353, 853]            # DNS / DoT / mDNS
+
+    gaming:
+      mark: af31
+      match:
+        netify_sets: [netify:app:riot-games]
+        udp_ports: "5000-5500,8393-8400"
+
+    streaming:
+      mark: af11
+      match:
+        netify_sets:
+          - netify:app:netflix
+          - netify:app:youtube
+          - netify:app:amazon-prime-video
+          - netify:category:video-streaming
+          - netify:app:steam
+          - netify:app:xbox-live
+          - netify:app:ubisoft-connect
+          - netify:app:gog-galaxy
+          - netify:category:file-transfer
+          - netify:app:windows-update
+          - netify:category:software-update
+
+    torrent:
+      mark: cs1
+      match:
+        netify_sets: [netify:app:bittorrent]
+        tcp_ports: "6881-6999,1337,6960-6969"
+        udp_ports: "6881-6999,1337,6960-6969"
+
+    web:
+      mark: af21
+      match:
+        tcp_ports: "80,443"
+        udp_ports: "80,443"
+
+    fps:
+      mark: af41
+      match:
+        udp_ports: "27015-27030"              # CS:GO etc.
+
+  ##########################################################################
+  # 6 ▸ CAKE  (per-interface shaping)
+  ##########################################################################
+  cake:
+    enabled: true
+
+    wan:
+      nic: *wan_if
+      # ifb will default to “ifb_<nic>” in the task file
+      download: 100mbit              # ingress  (WAN→LAN)
+      upload:   10mbit              # egress   (LAN→WAN)
+      rtt: 5ms
+      overhead: 44
+      mpu: 96
+      diffserv: diffserv8
+      extra_opts: >
+        nowash triple-isolate nat ack-filter-aggressive split-gso
+
+    lan:
+      nic: *lan_if
+      download: 1gbit
+      upload:   1gbit
+      diffserv: besteffort
+      extra_opts: "split-gso"
+
+  ##########################################################################
+  # 7 ▸ NETIFY FLOW-ACTIONS  (builds the @"netify:*" ipsets)
+  ##########################################################################
+  netify_flow_actions:
+    version: 1
+    actions:
+      voip:        { criteria: "category == 'voip';",
+                     targets: ["ipset.netify_voip"] }
+      zoom:        { criteria: "app == 'zoom';",
+                     targets: ["ipset.netify_zoom"] }
+      ms_teams:    { criteria: "app == 'microsoft-teams';",
+                     targets: ["ipset.netify_msteams"] }
+      riot_games:  { criteria: "app == 'riot-games';",
+                     targets: ["ipset.netify_riotgames"] }
+      youtube:     { criteria: "app == 'youtube';",
+                     targets: ["ipset.netify_youtube"] }
+      netflix:     { criteria: "app == 'netflix';",
+                     targets: ["ipset.netify_netflix"] }
+      prime_video: { criteria: "app == 'amazon-prime-video';",
+                     targets: ["ipset.netify_primevideo"] }
+      vpn:         { criteria: "category == 'vpn';",
+                     targets: ["ipset.netify_vpn"] }
+
+    target_defaults:
+      ipset:
+        interface: "*"
+        type: "hash:ip,port,ip"
+        ttl: 300
+        managed: true
+        flush_on_create: true
+        flush_on_destroy: true
+
+  ##########################################################################
+  # 8 ▸ RAW nft DSCP RULES  (if you still need them explicitly)
+  ##########################################################################
+dscp_rules: |
+  ###################################################################
+  # Real-time / critical  – tin 1 (CS6)
+  ip saddr @"netify:app:zoom"                dscp 0 counter set dscp cs6
+  ip saddr @"netify:app:microsoft-teams"     dscp 0 counter set dscp cs6
+  ip saddr @"netify:category:voip"           dscp 0 counter set dscp cs6
+  ip saddr @"netify:category:vpn"            dscp 0 counter set dscp cs6
+  ###################################################################
+  # Latency-sensitive gaming – tin 2 (AF31)
+  ip daddr @"netify:app:riot-games"          dscp 0 counter set dscp af31
+  ###################################################################
+  # Long-lived streams / bulk – tin 4 (AF11)
+  ip saddr @"netify:app:netflix"             dscp 0 counter set dscp af11
+  ip saddr @"netify:app:youtube"             dscp 0 counter set dscp af11
+  ip saddr @"netify:app:amazon-prime-video"  dscp 0 counter set dscp af11

@@ -1,0 +1,71 @@
+---
+# roles/firewall/tasks/install.yml
+# Installs nftables, ipset and Netify – updates cache only when required
+###############################################################################
+
+# 1 ▸ Core packages -----------------------------------------------------------
+- name: Ensure nftables & ipset are present (refresh cache only if stale >24 h)
+  ansible.builtin.apt:
+    name:
+      - nftables
+      - ipset
+    state: latest
+    update_cache: yes
+    cache_valid_time: 86400        # seconds → refresh if older than 1 day
+
+# 2 ▸ Netify repository & key --------------------------------------------------
+- name: Ensure helper tools for adding APT keys/repos
+  ansible.builtin.apt:
+    name: [curl, gnupg2, lsb-release]
+    state: latest
+    cache_valid_time: 86400
+
+- name: Check whether Netify key has already been installed (marker file)
+  ansible.builtin.stat:
+    path: /var/lib/netify_key_added        # ← pick any marker location you like
+  register: netify_key_marker
+
+# ---------------------------------------------------------------------------
+# Only when the marker is missing do we:
+#   1. download the key
+#   2. create /var/lib/netify_key_added   (so next run skips the download)
+# ---------------------------------------------------------------------------
+
+- name: Add Netify GPG key (idempotent)
+  ansible.builtin.get_url:
+    url: https://download.netify.ai/5/ubuntu/apt-gpg-key-netify.asc
+    dest: /usr/share/keyrings/netify.asc
+    mode: "0644"
+  when: not netify_key_marker.stat.exists
+
+- name: Touch marker file to record that the key is present
+  ansible.builtin.file:
+    path: /var/lib/netify_key_added
+    state: touch
+  when: not netify_key_marker.stat.exists
+
+- name: Add/verify Netify APT repository
+  ansible.builtin.apt_repository:
+    repo: "deb [arch=amd64 signed-by=/usr/share/keyrings/netify.asc] \
+           http://download.netify.ai/5/ubuntu/{{ ansible_distribution_release | lower }}/ /"
+    filename: netify
+    state: present
+  register: netify_repo
+
+# 3 ▸ Netify Agent & plugins ---------------------------------------------------
+- name: Install / upgrade Netify Agent & Flow-Actions plugin
+  ansible.builtin.apt:
+    name:
+      - netifyd
+      - netify-proc-core
+      - netify-sink-http
+      - netify-proc-flow-actions      # comment out if you don’t have a licence
+    state: latest
+    update_cache: "{{ netify_repo.changed }}"
+  notify: Restart netifyd
+
+- name: Enable and start Netify Agent
+  ansible.builtin.systemd:
+    name: netifyd
+    enabled: yes
+    state: started
