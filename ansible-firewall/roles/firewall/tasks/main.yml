@@ -1,6 +1,6 @@
 ---
 # 0 ▸ System prerequisites
-- import_tasks: install.yml        # packages + Netify
+- import_tasks: install.yml        # packages
 
 # 1 ▸ Kernel settings  (NAT needs forwarding)
 - import_tasks: sysctl.yml         # ← new
@@ -18,7 +18,7 @@
     validate: "nft -c -f %s"
   register: nft_cfg
 
-- import_tasks: ipsets.yml         # auto-create @"netify:*" sets
+- import_tasks: ipsets.yml         # auto-create ipsets
 
 - name: Reload nftables rules
   ansible.builtin.command: nft -f /etc/nftables.conf

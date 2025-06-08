@@ -1,6 +1,6 @@
 ---
 # roles/firewall/tasks/install.yml
-# Installs nftables, ipset and Netify – updates cache only when required
+# Installs nftables and ipset – updates cache only when required
 ###############################################################################
 
 # 1 ▸ Core packages -----------------------------------------------------------
