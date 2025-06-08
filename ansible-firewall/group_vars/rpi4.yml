@@ -57,20 +57,39 @@ firewall_cfg:
     voice:
       mark: cs6
       match:
+        ndpi_sets:
+          - ndpi:app:zoom
+          - ndpi:app:microsoft-teams
+          - ndpi:category:voip
+          - ndpi:category:vpn
         udp_ports: [53, 5353, 853]            # DNS / DoT / mDNS
 
     gaming:
       mark: af31
       match:
+        ndpi_sets: [ndpi:app:riot-games]
         udp_ports: "5000-5500,8393-8400"
 
     streaming:
       mark: af11
       match:
+        ndpi_sets:
+          - ndpi:app:netflix
+          - ndpi:app:youtube
+          - ndpi:app:amazon-prime-video
+          - ndpi:category:video-streaming
+          - ndpi:app:steam
+          - ndpi:app:xbox-live
+          - ndpi:app:ubisoft-connect
+          - ndpi:app:gog-galaxy
+          - ndpi:category:file-transfer
+          - ndpi:app:windows-update
+          - ndpi:category:software-update
         
     torrent:
       mark: cs1
       match:
+        ndpi_sets: [ndpi:app:bittorrent]
         tcp_ports: "6881-6999,1337,6960-6969"
         udp_ports: "6881-6999,1337,6960-6969"
 

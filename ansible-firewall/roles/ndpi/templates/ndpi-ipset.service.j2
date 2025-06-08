@@ -1,0 +1,12 @@
+[Unit]
+Description=nDPI ipset classification
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/ndpiReader -i {{ interface }} -v 1 -j | /usr/local/bin/ndpi_ipset.py
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

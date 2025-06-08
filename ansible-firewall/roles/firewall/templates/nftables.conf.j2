@@ -68,6 +68,9 @@ table inet mangle {
 {%   for ns in (cls.match.netify_sets | default([])) %}
 {%     set _ = ns_names.append(sanitize(ns)) %}
 {%   endfor %}
+{%   for ns in (cls.match.ndpi_sets | default([])) %}
+{%     set _ = ns_names.append(sanitize(ns)) %}
+{%   endfor %}
 {% endfor %}
 {% for ns in ns_names | unique %}
   set {{ ns }} { type ipv4_addr; }
@@ -80,6 +83,11 @@ table inet mangle {
 {%   if cls.match.netify_sets is defined %}
 {%     for ns in cls.match.netify_sets %}
     ip saddr @{{ sanitize(ns) }} ip dscp cs0 counter ip dscp set {{ mark }} comment "{{ name }} netify-saddr";
+{%     endfor %}
+{%   endif %}
+{%   if cls.match.ndpi_sets is defined %}
+{%     for ns in cls.match.ndpi_sets %}
+    ip saddr @{{ sanitize(ns) }} ip dscp cs0 counter ip dscp set {{ mark }} comment "{{ name }} ndpi-saddr";
 {%     endfor %}
 {%   endif %}
 {%   if cls.match is defined and cls.match.udp_ports is defined %}

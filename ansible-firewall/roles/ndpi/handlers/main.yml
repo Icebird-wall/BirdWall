@@ -9,3 +9,6 @@
 
 - name: ldconfig
   ansible.builtin.command: ldconfig
+
+- name: Reload systemd
+  ansible.builtin.command: systemctl daemon-reload
