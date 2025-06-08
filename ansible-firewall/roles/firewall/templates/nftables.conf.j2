@@ -62,10 +62,10 @@ table ip nat {
 {% if firewall_cfg.dscp_classes %}
 table inet mangle {
 
-  # ── Netify dynamic IP sets (empty declarations so nft -c passes) ──────────
+  # ── nDPI dynamic IP sets (empty declarations so nft -c passes) ───────────
 {% set ns_names = [] %}
 {% for cls in firewall_cfg.dscp_classes.values() %}
-{%   for ns in (cls.match.netify_sets | default([])) %}
+{%   for ns in (cls.match.ndpi_sets | default([])) %}
 {%     set _ = ns_names.append(sanitize(ns)) %}
 {%   endfor %}
 {% endfor %}
@@ -77,9 +77,9 @@ table inet mangle {
     type filter hook prerouting priority -300;    # before conntrack
 {% for name, cls in firewall_cfg.dscp_classes.items() %}
 {%   set mark = cls.dscp | default('cs0') %}
-{%   if cls.match.netify_sets is defined %}
-{%     for ns in cls.match.netify_sets %}
-    ip saddr @{{ sanitize(ns) }} ip dscp cs0 counter ip dscp set {{ mark }} comment "{{ name }} netify-saddr";
+{%   if cls.match.ndpi_sets is defined %}
+{%     for ns in cls.match.ndpi_sets %}
+    ip saddr @{{ sanitize(ns) }} ip dscp cs0 counter ip dscp set {{ mark }} comment "{{ name }} ndpi-saddr";
 {%     endfor %}
 {%   endif %}
 {%   if cls.match is defined and cls.match.udp_ports is defined %}

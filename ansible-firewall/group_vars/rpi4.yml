@@ -58,27 +58,38 @@ firewall_cfg:
       mark: cs6
       match:
         udp_ports: [53, 5353, 853]            # DNS / DoT / mDNS
+        ndpi_sets:
+          - VoIP
 
     gaming:
       mark: af31
       match:
         udp_ports: "5000-5500,8393-8400"
+        ndpi_sets:
+          - Game
 
     streaming:
       mark: af11
       match:
+        ndpi_sets:
+          - Streaming
+          - Media
         
     torrent:
       mark: cs1
       match:
         tcp_ports: "6881-6999,1337,6960-6969"
         udp_ports: "6881-6999,1337,6960-6969"
+        ndpi_sets:
+          - BitTorrent
 
     web:
       mark: af21
       match:
         tcp_ports: "80,443"
         udp_ports: "80,443"
+        ndpi_sets:
+          - Web
 
     fps:
       mark: af41
