@@ -54,6 +54,16 @@ To diagnose firewall settings, use the provided script:
 ./diag_firewall.sh
 ```
 
+## nDPI Setup
+
+nDPI is installed automatically by the Ansible playbook. Ensure the
+`ndpi` role is listed in `site.yml` and run the playbook against your
+hosts:
+
+```bash
+ansible-playbook -i inventory/hosts site.yml
+```
+
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

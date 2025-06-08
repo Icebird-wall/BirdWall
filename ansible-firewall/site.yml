@@ -1,5 +1,6 @@
 
-- name: Configure Ubuntu firewall with nftables
+- name: Configure firewall and nDPI
   hosts: all
   roles:
-    - firewall       
+    - firewall
+    - ndpi
