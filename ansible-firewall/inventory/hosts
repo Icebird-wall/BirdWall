@@ -1,9 +1,9 @@
 #[firewalls]
 #[firewalls]
-[firewalls]
+
 [firewalls]
 ubuntu ansible_host=172.16.0.1 ansible_user=root ansible_ssh_pass=train ansible_become_pass=train
-#localhost ansible_host=localhost ansible_user=ansible ansible_ssh_pass=train ansible_become_pass=train
+
 
 [rpi4]
 
