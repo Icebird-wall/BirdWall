@@ -64,6 +64,11 @@ hosts:
 ansible-playbook -i inventory/hosts site.yml
 ```
 
+The role also deploys a small helper service that feeds nDPI flow
+information into nftables ipsets. These ipsets are then referenced in the
+nftables configuration to apply DSCP marks based on the detected
+application traffic.
+
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

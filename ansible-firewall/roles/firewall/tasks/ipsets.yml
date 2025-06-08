@@ -1,16 +1,23 @@
 ###############################################################################
 # Ensure that all ipsets referenced in dscp_rules exist (even if empty)
 ###############################################################################
-- set_fact:
-    ipset_names: "{{ dscp_rules | regex_findall('@([A-Za-z0-9_]+)') }}"
-
 - name: Extract ipset names from dscp_rules
   set_fact:
     ipset_names: "{{ dscp_rules | regex_findall('@\"([^\"]+)\"') | list }}"
 
+- name: Gather ipset names from dscp_classes
+  set_fact:
+    ipset_names: "{{ ipset_names + (item.match.ndpi_sets | default([])) + (item.match.netify_sets | default([])) }}"
+  loop: "{{ firewall_cfg.dscp_classes.values() }}"
+  when: firewall_cfg.dscp_classes is defined
+
+- name: Deduplicate ipset names
+  set_fact:
+    ipset_names: "{{ ipset_names | unique }}"
+
 - name: Create required ipsets
   ansible.builtin.command: >
-    ipset create "{{ item }}" hash:ip family inet timeout 0 -exist
+    ipset create "{{ item | regex_replace('[:\\.-]', '_') }}" hash:ip family inet timeout 0 -exist
   loop: "{{ ipset_names }}"
   register: ipset_create
   changed_when: "'created' in ipset_create.stdout"

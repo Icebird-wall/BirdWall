@@ -81,3 +81,24 @@
     chdir: /usr/local/src/nDPI
   notify: ldconfig
 
+- name: Install nDPI ipset helper script
+  ansible.builtin.copy:
+    src: ndpi_ipset.py
+    dest: /usr/local/bin/ndpi_ipset.py
+    mode: '0755'
+
+- name: Install nDPI ipset service
+  ansible.builtin.template:
+    src: ndpi-ipset.service.j2
+    dest: /etc/systemd/system/ndpi-ipset.service
+    mode: '0644'
+  vars:
+    interface: "{{ firewall_cfg.interfaces.wan.nic }}"
+  notify: Reload systemd
+
+- name: Enable and start nDPI ipset service
+  ansible.builtin.systemd:
+    name: ndpi-ipset.service
+    enabled: yes
+    state: started
+
