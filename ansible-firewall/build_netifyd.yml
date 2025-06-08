@@ -1,0 +1,101 @@
+# playbook.yml
+---
+- name: Build and Deploy netifyd
+  hosts: all
+  become: true
+  gather_facts: true
+  vars:
+    netifyd_repo: "https://gitlab.com/netify.ai/public/netify-agent"
+    netifyd_version: "master"
+    build_dir: "/tmp/netifyd-build"
+    install_path: "/usr/local/bin/netifyd"
+    service_user: "netifyd"
+    service_group: "netifyd"
+    service_unit: "/etc/systemd/system/netifyd.service"
+
+  # First we run build steps on the control node itself
+  tasks:
+    - name: Ensure build deps on control node (Ubuntu 24.04)
+      ansible.builtin.apt:
+        name:
+          - git
+          - build-essential
+          - rustc
+          - cargo
+          - pkg-config
+          - libssl-dev
+        state: present
+      delegate_to: localhost
+      run_once: true
+
+    - name: Clone netifyd source (control node)
+      ansible.builtin.git:
+        repo: "{{ netifyd_repo }}"
+        version: "{{ netifyd_version }}"
+        dest: "{{ build_dir }}"
+        force: yes
+      delegate_to: localhost
+      run_once: true
+
+    - name: Build netifyd (release) on control node
+      ansible.builtin.command: cargo build --release
+      args:
+        chdir: "{{ build_dir }}"
+      delegate_to: localhost
+      run_once: true
+
+    - name: Fetch built binary path
+      ansible.builtin.set_fact:
+        built_binary: "{{ build_dir }}/target/release/netifyd"
+      delegate_to: localhost
+      run_once: true
+
+    # Now deployment tasks on each target
+    - name: Ensure runtime deps on target (Ubuntu 24.04)
+      ansible.builtin.package:
+        name:
+          - libssl-dev
+        state: present
+
+    - name: Create netifyd user and group
+      ansible.builtin.user:
+        name: "{{ service_user }}"
+        system: true
+        createhome: false
+
+    - name: Copy netifyd binary to target
+      ansible.builtin.copy:
+        src: "{{ built_binary }}"
+        dest: "{{ install_path }}"
+        owner: "{{ service_user }}"
+        group: "{{ service_group }}"
+        mode: '0755'
+      delegate_to: localhost
+
+    - name: Upload systemd unit file
+      ansible.builtin.copy:
+        dest: "{{ service_unit }}"
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          [Unit]
+          Description=netifyd daemon
+          After=network.target
+
+          [Service]
+          Type=simple
+          User={{ service_user }}
+          ExecStart={{ install_path }}
+          Restart=on-failure
+          LimitNOFILE=65536
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Reload systemd, enable & start netifyd
+      ansible.builtin.systemd:
+        daemon_reload: yes
+        name: netifyd
+        enabled: yes
+        state: started

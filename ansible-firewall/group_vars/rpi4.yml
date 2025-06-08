@@ -9,11 +9,11 @@ firewall_cfg:
   ##########################################################################
   interfaces:
     lan:
-      nic: &lan_if "enp6s19" #EXAMPLE- USE YOUR NIC NAME FROM UBUNTU INSTALLATION
-      cidr: "172.16.0.1/24" #EXAMPLE- USE THE IP/SUBNET COMBO YOU WANT FOR YOUR LAN
+      nic: &lan_if "eth0" #EXAMPLE- USE YOUR NIC NAME FROM UBUNTU INSTALLATION
+      cidr: "172.16.0.116/24" #EXAMPLE- USE THE IP/SUBNET COMBO YOU WANT FOR YOUR LAN
 
     wan:
-      nic: &wan_if "enx020632376766"
+      nic: &wan_if "enxd634ae8ac223"
       method: "dhcp" # DHCP IS USED HERE CAUSE I'M DOING TETHERING/GETTING INTERNET FROM ANOTHER SOURCE/CABLE. EDIT AS NEEDED
 
   ##########################################################################
@@ -94,7 +94,7 @@ firewall_cfg:
     wan:
       nic: *wan_if
       # ifb will default to “ifb_<nic>” in the task file
-      download: 120mbit              # ingress  (WAN→LAN)
+      download: 3000mbit              # ingress  (WAN→LAN)
       upload:   10mbit              # egress   (LAN→WAN)
       rtt: 5ms
       overhead: 44

@@ -1,6 +1,5 @@
 
-- name: Configure Ubuntu firewall with nftables & Netify
-  hosts: firewalls
-  become: yes
+- name: Configure Ubuntu firewall with nftables
+  hosts: all
   roles:
     - firewall       
