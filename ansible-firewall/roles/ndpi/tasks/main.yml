@@ -1,0 +1,83 @@
+---
+# Install nDPI and configure the capture interface
+
+- name: Install nDPI dependencies on Debian/Ubuntu
+  ansible.builtin.apt:
+    name:
+      - build-essential
+      - libpcap-dev
+      - git
+      - cmake
+      - libtool
+      - pkg-config
+      - autoconf
+      - automake
+    state: present
+    update_cache: yes
+  when: ansible_facts['os_family'] == 'Debian'
+
+- name: Install nDPI dependencies on RedHat
+  ansible.builtin.yum:
+    name:
+      - gcc
+      - gcc-c++
+      - make
+      - libpcap-devel
+      - git
+      - cmake
+      - libtool
+      - pkgconfig
+      - autoconf
+      - automake
+    state: present
+  when: ansible_facts['os_family'] == 'RedHat'
+
+- name: Configure nDPI interface via netplan (Ubuntu)
+  ansible.builtin.template:
+    src: ndpi_netplan.yaml.j2
+    dest: /etc/netplan/99-ndpi.yaml
+    owner: root
+    group: root
+    mode: "0644"
+  vars:
+    iface: "{{ ndpi_interface | default('ndpi0') }}"
+  notify: Apply netplan
+  when: ansible_facts['distribution'] == 'Ubuntu'
+
+- name: Configure nDPI interface via /etc/network/interfaces (Debian)
+  ansible.builtin.blockinfile:
+    path: /etc/network/interfaces
+    block: |
+      # nDPI interface
+      allow-hotplug {{ ndpi_interface | default('ndpi0') }}
+      iface {{ ndpi_interface | default('ndpi0') }} inet dhcp
+    create: yes
+  notify: Restart networking
+  when: ansible_facts['distribution'] == 'Debian'
+
+- name: Configure nDPI interface via NetworkManager (RedHat)
+  ansible.builtin.command: >-
+    nmcli connection add type ethernet ifname {{ ndpi_interface | default('ndpi0') }}
+    con-name {{ ndpi_interface | default('ndpi0') }} autoconnect yes
+  args:
+    creates: "/etc/NetworkManager/system-connections/{{ ndpi_interface | default('ndpi0') }}.nmconnection"
+  when: ansible_facts['os_family'] == 'RedHat'
+
+- name: Clone nDPI repository
+  ansible.builtin.git:
+    repo: https://github.com/ntop/nDPI.git
+    dest: /usr/local/src/nDPI
+    version: master
+
+- name: Build nDPI
+  ansible.builtin.shell: |
+    ./autogen.sh && ./configure && make -j$(nproc)
+  args:
+    chdir: /usr/local/src/nDPI
+
+- name: Install nDPI
+  ansible.builtin.shell: make install
+  args:
+    chdir: /usr/local/src/nDPI
+  notify: ldconfig
+
