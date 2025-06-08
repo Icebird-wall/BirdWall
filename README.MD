@@ -64,6 +64,24 @@ hosts:
 ansible-playbook -i inventory/hosts site.yml
 ```
 
+### Traffic Tagging
+
+nDPI classifications can be referenced in `group_vars/firewalls.yml` using
+`ndpi_sets` inside each `dscp_classes` entry. When the playbook runs, the
+`ndpi_ipset.py` helper creates ipsets for every referenced nDPI application
+or category and nftables marks matching traffic accordingly.
+
+Example:
+
+```yaml
+  streaming:
+    mark: af11
+    match:
+      ndpi_sets:
+        - Streaming
+        - Media
+```
+
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

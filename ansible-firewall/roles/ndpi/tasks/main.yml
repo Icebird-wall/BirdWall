@@ -81,3 +81,20 @@
     chdir: /usr/local/src/nDPI
   notify: ldconfig
 
+- name: Install nDPI ipset helper
+  ansible.builtin.copy:
+    src: ndpi_ipset.py
+    dest: /usr/local/bin/ndpi_ipset.py
+    mode: "0755"
+
+- name: Dump firewall configuration for nDPI
+  ansible.builtin.copy:
+    dest: /etc/firewall_config.yml
+    content: "{{ {'firewall_cfg': firewall_cfg} | to_nice_yaml }}"
+  when: firewall_cfg is defined
+
+- name: Generate nDPI ipsets
+  ansible.builtin.command: >
+    /usr/local/bin/ndpi_ipset.py /etc/firewall_config.yml
+  when: firewall_cfg is defined
+
